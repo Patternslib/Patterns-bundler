@@ -14,7 +14,7 @@ log = logging.getLogger('bundler')
 
 parser = argparse.ArgumentParser()
 parser.add_argument('--host', dest='host', default='localhost', help='Host to listen on. Defaults lo localhost.')
-parser.add_argument('--port', dest='port', type=int, default=8080, help='port to listen on. Defaults to 8080.')
+parser.add_argument('--port', dest='port', type=int, default=2652, help='port to listen on. Defaults to 8080.')
 parser.add_argument('--patternsdir', dest='patternsdir', default='../Patterns', help='Path to the Patterns checkout.')
 cargs = parser.parse_args()
 patternsdir = os.path.abspath(cargs.patternsdir)
