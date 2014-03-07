@@ -11,6 +11,13 @@ selection.
 
 # Installation
 
+## Bundler
+
 pip install pyramid and then start the server by running python bundler.py. 
 You must provide host, port and the path to the Patterns checkout that should 
 be used.
+
+## Circus
+
+To run the server in the background you can use circus. You need to pip install 
+circus and circus-web to run it
