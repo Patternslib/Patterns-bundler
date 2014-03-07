@@ -117,8 +117,8 @@ def make_bundle(request):
 
 if __name__ == '__main__':              
     config = Configurator()
-    config.add_route('set', '/set/{name}')
-    config.add_view(make_bundle, route_name='set')
+    config.add_route('getBundle', '/getBundle')
+    config.add_view(make_bundle, route_name='getBundle')
     app = config.make_wsgi_app()
     server = make_server(cargs.host, cargs.port, app)
     server.serve_forever()
