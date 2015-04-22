@@ -57,10 +57,14 @@ def make_bundle(request):
         mResponse = Response(data)
         mResponse.headers['content-type'] = 'text/html'
         return mResponse
-           
+
     # string that contains all the patterns that are to be included
-    custom_config = "" 
-    modules = [x.replace('pat/', 'pat-') for x in request.GET.keys() if x.startswith('pat/') or x in ('modernizr', 'less', 'prefixfree')]
+    custom_config = ""
+    modules = [
+        x.replace('pat/', 'pat-')
+        for x in request.GET.keys()
+        if x.startswith('pat/') or x in ('modernizr', 'less', 'prefixfree')
+    ]
     modules.sort()
 
     log.info( "Modules: %s" % str(modules) )
@@ -70,8 +74,8 @@ def make_bundle(request):
 
     hashkey = hashlib.new('sha1')
     hashkey.update('-'.join(modules))
-    bundlename = "patterns-%s-%s%s.js" %  ( version, hashkey.hexdigest(), minify )
-    
+    bundlename = "patterns-%s-%s%s.js" % ( version, hashkey.hexdigest(), minify )
+
     log.info('Hashkey generated: %s' % hashkey.hexdigest() )
     log.info('Bundlename generated: %s' % bundlename)
 
@@ -83,7 +87,8 @@ def make_bundle(request):
         # build
 
         if not os.access(patternsdir+"/build-custom.js", os.F_OK):
-            buildfile = open(patternsdir+'/build.js', 'rb').read().replace('"patterns": "patterns"', '"patterns": "patterns-custom"')
+            buildfile = open(patternsdir+'/build.js', 'rb').read().replace(
+                '"patterns": "patterns"', '"patterns": "patterns-custom"')
             open(patternsdir+'/build-custom.js', 'wb').write(buildfile)
 
         # XXX if bundlename in cache, return that
@@ -95,27 +100,27 @@ def make_bundle(request):
         data = open(patternsdir+'/src/patterns-custom.js', 'wb')
         data.write(custom_config)
         data.close()
-    
-        #os.chdir(cargs.patternsdir)  
-        # call the r.js with alternate params for  out, include, optimize and insertREquire statements
-        # place output file into a cache directory
-        subprocess.call([patternsdir+"/node_modules/.bin/r.js", 
-                         "-o", 
-                         patternsdir+"/build-custom.js" , 
-                         "out=bundlecache/"+bundlename, 
-                         "include=patterns-custom", 
-                         "insertRequire=patterns-custom", 
+
+        #os.chdir(cargs.patternsdir)
+        # call the r.js with alternate params for out, include, optimize and
+        # insertREquire statements place output file into a cache directory
+        subprocess.call([patternsdir+"/node_modules/.bin/r.js",
+                         "-o",
+                         patternsdir+"/build-custom.js" ,
+                         "out=bundlecache/"+bundlename,
+                         "include=patterns-custom",
+                         "insertRequire=patterns-custom",
                          "optimize="+uglify])
-        
-        
-    data = open("bundlecache/%s" % bundlename, 'rb').read() # create response with bundle.js as attachment
+
+    # create response with bundle.js as attachment
+    data = open("bundlecache/%s" % bundlename, 'rb').read()
     mResponse = Response(data)
     mResponse.headers['content-type'] = 'application/javascript'
-    mResponse.headers['content-disposition'] = 'attachment;filename=%s' % bundlename    
+    mResponse.headers['content-disposition'] = 'attachment;filename=%s' % bundlename
 
     return mResponse
 
-if __name__ == '__main__':              
+if __name__ == '__main__':
     config = Configurator()
     config.add_route('getBundle', '/getBundle')
     config.add_view(make_bundle, route_name='getBundle')
