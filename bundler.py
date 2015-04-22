@@ -104,13 +104,15 @@ def make_bundle(request):
         #os.chdir(cargs.patternsdir)
         # call the r.js with alternate params for out, include, optimize and
         # insertREquire statements place output file into a cache directory
-        subprocess.call([patternsdir+"/node_modules/.bin/r.js",
-                         "-o",
-                         patternsdir+"/build-custom.js" ,
-                         "out=bundlecache/"+bundlename,
-                         "include=patterns-custom",
-                         "insertRequire=patterns-custom",
-                         "optimize="+uglify])
+        subprocess.call([
+            patternsdir+"/node_modules/.bin/r.js",
+            "-o",
+            patternsdir+"/build-custom.js" ,
+            "out=bundlecache/"+bundlename,
+            "include=patterns-custom",
+            "insertRequire=patterns-custom",
+            "optimize="+uglify,
+        ])
 
     # create response with bundle.js as attachment
     data = open("bundlecache/%s" % bundlename, 'rb').read()
