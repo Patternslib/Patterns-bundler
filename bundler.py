@@ -1,25 +1,44 @@
-import argparse
-import json
-import os
-import hashlib
-import logging
-import shutil
-import subprocess
-import tempfile
 from pyramid.config import Configurator
 from pyramid.response import Response
 from wsgiref.simple_server import make_server
+from zipfile import ZipFile
+
+import argparse
+import hashlib
+import json
+import logging
+import os
+import shutil
+import subprocess
+
 
 log = logging.getLogger('bundler')
 
 parser = argparse.ArgumentParser()
-parser.add_argument('--host', dest='host', default='localhost', help='Host to listen on. Defaults lo localhost.')
-parser.add_argument('--port', dest='port', type=int, default=2652, help='port to listen on. Defaults to 8080.')
-parser.add_argument('--patternsdir', dest='patternsdir', default='../Patterns', help='Path to the Patterns checkout.')
+parser.add_argument(
+    '--host',
+    dest='host',
+    default='localhost',
+    help='Host to listen on. Defaults lo localhost.',
+)
+parser.add_argument(
+    '--port',
+    dest='port',
+    type=int,
+    default=2652,
+    help='port to listen on. Defaults to 8080.',
+)
+parser.add_argument(
+    '--patternsdir',
+    dest='patternsdir',
+    default='../Patterns',
+    help='Path to the Patterns checkout.',
+)
 cargs = parser.parse_args()
 patternsdir = os.path.abspath(cargs.patternsdir)
 
-version = json.load(open(patternsdir+"/package.json", "rb"))['version'].encode('utf-8')
+version = json.load(
+    open(patternsdir+"/package.json", "rb"))['version'].encode('utf-8')
 
 TPL_head = """/* Patterns bundle configuration.
 *
@@ -52,8 +71,8 @@ TPL_tail = """
 
 
 def make_bundle(request):
-    if len(request.GET.keys())==0:
-        data = open('index.html','rb').read()
+    if len(request.GET.keys()) == 0:
+        data = open('index.html', 'rb').read()
         mResponse = Response(data)
         mResponse.headers['content-type'] = 'text/html'
         return mResponse
@@ -67,24 +86,28 @@ def make_bundle(request):
     ]
     modules.sort()
 
-    log.info( "Modules: %s" % str(modules) )
+    log.info("Modules: %s" % str(modules))
 
-    minify = not not request.GET.get('minify',False) and '.min' or ''
-    uglify = not not request.GET.get('minify',False) and 'uglify' or 'none'
+    minify = not not request.GET.get('minify', False) and '.min' or ''
+    uglify = not not request.GET.get('minify', False) and 'uglify' or 'none'
 
     hashkey = hashlib.new('sha1')
     hashkey.update('-'.join(modules))
-    bundlename = "patterns-%s-%s%s.js" % ( version, hashkey.hexdigest(), minify )
+    bundlehash = "patterns-{0}-{1}".format(version, hashkey.hexdigest())
+    bundledir_path = "bundlecache/{0}".format(bundlehash)
+    bundlezip_path = "bundlecache/{0}.zip".format(bundlehash)
+    # maybe indicate if it's full, core or custom in the name?
+    bundlename = "patterns-{0}-{1}.js".format(version, minify)
 
-    log.info('Hashkey generated: %s' % hashkey.hexdigest() )
-    log.info('Bundlename generated: %s' % bundlename)
+    log.info('Hashkey generated: {0}'.format(hashkey.hexdigest()))
+    log.info('Bundlehash generated: {0}'.format(bundlehash))
 
     # Create cache dir if it doesn't exist yet
-    if not os.access("bundlecache", os.F_OK):
+    if not os.path.exists("bundlecache"):
         os.makedirs('bundlecache')
 
-    if not os.access("bundlecache/%s" % bundlename, os.F_OK):
-        # build
+    if not os.path.exists(bundlezip_path):
+        shutil.copytree("skel", "bundlecache/%s" % bundlehash)
 
         if not os.access(patternsdir+"/build-custom.js", os.F_OK):
             buildfile = open(patternsdir+'/build.js', 'rb').read().replace(
@@ -107,18 +130,25 @@ def make_bundle(request):
         subprocess.call([
             patternsdir+"/node_modules/.bin/r.js",
             "-o",
-            patternsdir+"/build-custom.js" ,
-            "out=bundlecache/"+bundlename,
+            patternsdir+"/build-custom.js",
+            "out=bundlecache/{0}/js/{1}".format(bundlehash, bundlename),
             "include=patterns-custom",
             "insertRequire=patterns-custom",
             "optimize="+uglify,
         ])
 
+        with ZipFile(bundlezip_path, "w") as bundlezip:
+            os.chdir(bundledir_path)
+            for base, dirs, files in os.walk("."):
+                for file_name in files:
+                    file_path = os.path.join(base, file_name)
+                    bundlezip.write(file_path)
+
     # create response with bundle.js as attachment
-    data = open("bundlecache/%s" % bundlename, 'rb').read()
+    data = open("bundlecache/%s" % bundlezip, 'rb').read()
     mResponse = Response(data)
-    mResponse.headers['content-type'] = 'application/javascript'
-    mResponse.headers['content-disposition'] = 'attachment;filename=%s' % bundlename
+    mResponse.headers['content-type'] = 'application/zip'
+    mResponse.headers['content-disposition'] = 'attachment;filename={0}.zip'.format(bundlehash)
 
     return mResponse
 
