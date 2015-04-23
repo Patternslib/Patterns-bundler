@@ -70,6 +70,67 @@ TPL_tail = """
 """
 
 
+def build_js(modules, bundlehash, bundlename, uglify):
+    if not os.path.exists(patternsdir+"/build-custom.js"):
+        buildfile = open(patternsdir+'/build.js', 'rb').read().replace(
+            '"patterns": "patterns"', '"patterns": "patterns-custom"')
+        open(patternsdir+'/build-custom.js', 'wb').write(buildfile)
+
+    # parse query string for patterns and add them
+    module_str = ",\n".join(["'%s'" % m for m in modules])
+    custom_config = "%s\n%s\n%s" % (TPL_head, module_str, TPL_tail)
+    log.info(custom_config)
+    data = open(patternsdir+'/src/patterns-custom.js', 'wb')
+    data.write(custom_config)
+    data.close()
+
+    subprocess.call([
+        patternsdir+"/node_modules/.bin/r.js",
+        "-o",
+        patternsdir+"/build-custom.js",
+        "out=bundlecache/{0}/js/{1}.js".format(bundlehash, bundlename),
+        "include=patterns-custom",
+        "insertRequire=patterns-custom",
+        "optimize="+uglify,
+    ])
+
+
+def build_css(bundledir_path, modules, minify, bundlehash, bundlename):
+    scss_path = os.path.abspath(os.path.join(bundledir_path, "patterns.scss"))
+    with open(scss_path, "w") as patterns_scss:
+        for module in modules:
+            module_name = module.replace("pat-", "")
+            module_scss_path = "{0}/docs/patterns/{1}/_{1}.scss".format(
+                patternsdir, module_name)
+            if os.path.exists(module_scss_path):
+                patterns_scss.write('@import "{0}";\n'.format(module_scss_path))
+        patterns_scss.write('@import "{0}/_sass/_patterns.scss";'.format(patternsdir))
+    sass_cmd = subprocess.Popen(
+        ["sass",
+         "--style={0}".format("compressed" if minify else "nested"),
+         #"--load-path={0}/_sass".format(patternsdir),
+         scss_path],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+    )
+    with open(
+            os.path.join("bundlecache", bundlehash, "css", bundlename+".css"), "w") as css_file:
+        css, error = sass_cmd.communicate()
+        css_file.write(css)
+    os.remove(scss_path)
+
+
+def build_zipfile(bundlezip_path, bundledir_path):
+    with ZipFile(bundlezip_path, "w") as bundlezip:
+        current_dir = os.getcwd()
+        os.chdir(bundledir_path)
+        for base, dirs, files in os.walk("."):
+            for file_name in files:
+                file_path = os.path.join(base, file_name)
+                bundlezip.write(file_path)
+        os.chdir(current_dir)
+
+
 def make_bundle(request):
     if len(request.GET.keys()) == 0:
         data = open('index.html', 'rb').read()
@@ -77,8 +138,6 @@ def make_bundle(request):
         mResponse.headers['content-type'] = 'text/html'
         return mResponse
 
-    # string that contains all the patterns that are to be included
-    custom_config = ""
     modules = [
         x.replace('pat/', 'pat-')
         for x in request.GET.keys()
@@ -88,16 +147,16 @@ def make_bundle(request):
 
     log.info("Modules: %s" % str(modules))
 
-    minify = not not request.GET.get('minify', False) and '.min' or ''
-    uglify = not not request.GET.get('minify', False) and 'uglify' or 'none'
+    minify = request.GET.get('minify') == 'on' and '.min' or ''
+    uglify = minify and 'uglify' or 'none'
 
     hashkey = hashlib.new('sha1')
     hashkey.update('-'.join(modules))
-    bundlehash = "patterns-{0}-{1}".format(version, hashkey.hexdigest())
+    # maybe indicate if it's full, core or custom in the name?
+    bundlename = "patterns-{0}{1}".format(version, "-min" if minify else "")
+    bundlehash = "{0}-{1}".format(bundlename, hashkey.hexdigest())
     bundledir_path = "bundlecache/{0}".format(bundlehash)
     bundlezip_path = "bundlecache/{0}.zip".format(bundlehash)
-    # maybe indicate if it's full, core or custom in the name?
-    bundlename = "patterns-{0}-{1}.js".format(version, minify)
 
     log.info('Hashkey generated: {0}'.format(hashkey.hexdigest()))
     log.info('Bundlehash generated: {0}'.format(bundlehash))
@@ -107,48 +166,17 @@ def make_bundle(request):
         os.makedirs('bundlecache')
 
     if not os.path.exists(bundlezip_path):
-        shutil.copytree("skel", "bundlecache/%s" % bundlehash)
+        if not os.path.exists(bundledir_path):
+            shutil.copytree("skel", bundledir_path)
 
-        if not os.access(patternsdir+"/build-custom.js", os.F_OK):
-            buildfile = open(patternsdir+'/build.js', 'rb').read().replace(
-                '"patterns": "patterns"', '"patterns": "patterns-custom"')
-            open(patternsdir+'/build-custom.js', 'wb').write(buildfile)
+        build_js(modules, bundlehash, bundlename, uglify)
+        build_css(bundledir_path, modules, minify, bundlehash, bundlename)
+        build_zipfile(bundlezip_path, bundledir_path)
 
-        # XXX if bundlename in cache, return that
-
-        # parse query string for patterns and add them
-        module_str = ",\n".join(["'%s'" % m for m in modules])
-        custom_config = "%s\n%s\n%s" % (TPL_head, module_str, TPL_tail)
-        log.info(custom_config)
-        data = open(patternsdir+'/src/patterns-custom.js', 'wb')
-        data.write(custom_config)
-        data.close()
-
-        #os.chdir(cargs.patternsdir)
-        # call the r.js with alternate params for out, include, optimize and
-        # insertREquire statements place output file into a cache directory
-        subprocess.call([
-            patternsdir+"/node_modules/.bin/r.js",
-            "-o",
-            patternsdir+"/build-custom.js",
-            "out=bundlecache/{0}/js/{1}".format(bundlehash, bundlename),
-            "include=patterns-custom",
-            "insertRequire=patterns-custom",
-            "optimize="+uglify,
-        ])
-
-        with ZipFile(bundlezip_path, "w") as bundlezip:
-            os.chdir(bundledir_path)
-            for base, dirs, files in os.walk("."):
-                for file_name in files:
-                    file_path = os.path.join(base, file_name)
-                    bundlezip.write(file_path)
-
-    # create response with bundle.js as attachment
-    data = open("bundlecache/%s" % bundlezip, 'rb').read()
+    data = open(bundlezip_path, 'rb').read()
     mResponse = Response(data)
     mResponse.headers['content-type'] = 'application/zip'
-    mResponse.headers['content-disposition'] = 'attachment;filename={0}.zip'.format(bundlehash)
+    mResponse.headers['content-disposition'] = 'attachment;filename={0}.zip'.format(bundlename)
 
     return mResponse
 
