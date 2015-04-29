@@ -1,3 +1,5 @@
+from distutils.dir_util import copy_tree
+from lxml import etree
 from pyramid.config import Configurator
 from pyramid.response import Response
 from wsgiref.simple_server import make_server
@@ -12,6 +14,7 @@ import shutil
 import subprocess
 
 
+html_parser = etree.HTMLParser()
 log = logging.getLogger('bundler')
 
 parser = argparse.ArgumentParser()
@@ -95,13 +98,14 @@ def build_js(modules, bundlehash, bundlename, uglify):
     ])
 
 
-def build_css(bundledir_path, modules, minify, bundlehash, bundlename):
+def build_css(bundledir_path, modules, minify, bundlename):
     scss_path = os.path.abspath(os.path.join(bundledir_path, "patterns.scss"))
+    initial_dir = os.getcwd()
+    os.chdir(patternsdir)
     with open(scss_path, "w") as patterns_scss:
         for module in modules:
             module_name = module.replace("pat-", "")
-            module_scss_path = "{0}/docs/patterns/{1}/_{1}.scss".format(
-                patternsdir, module_name)
+            module_scss_path = "{0}/src/pat/{1}/_{1}.scss".format(patternsdir, module_name)
             if os.path.exists(module_scss_path):
                 patterns_scss.write('@import "{0}";\n'.format(module_scss_path))
         patterns_scss.write('@import "{0}/_sass/_patterns.scss";'.format(patternsdir))
@@ -114,21 +118,63 @@ def build_css(bundledir_path, modules, minify, bundlehash, bundlename):
         stdout=subprocess.PIPE,
     )
     with open(
-            os.path.join("bundlecache", bundlehash, "css", bundlename+".css"), "w") as css_file:
+            os.path.join(bundledir_path, "style", bundlename+".css"), "w") as css_file:
         css, error = sass_cmd.communicate()
         css_file.write(css)
     os.remove(scss_path)
+    os.chdir(initial_dir)
+
+
+def build_html(modules, bundledir_path, bundlename):
+    copy_tree(os.path.join(patternsdir, "style"), os.path.join(bundledir_path, "style"))
+
+    for module in modules:
+        module_name = module.replace("pat-", "")
+        module_path = "{0}/src/pat/{1}/".format(patternsdir, module_name)
+        if not os.path.exists(module_path):
+            continue
+        module_files = os.listdir(module_path)
+        docs_path = os.path.join(bundledir_path, "docs", module_name)
+        if not os.path.exists(docs_path):
+            os.makedirs(docs_path)
+        for module_resource in module_files:
+            extension = os.path.splitext(module_resource)[1]
+            if extension not in [".scss", ".js", ".css", ".psd"]:
+                path = os.path.join(module_path, module_resource)
+                if os.path.isfile(path):
+                    shutil.copy(path, docs_path)
+                    if extension == ".html":
+                        with open(os.path.join(docs_path, module_resource), "r+") as html_file:
+                            tree = etree.parse(html_file, html_parser)
+                            for node in tree.xpath("//head/link|//script"):
+                                node.getparent().remove(node)
+                            print "fixing up: {0}".format(docs_path)
+                            head = tree.xpath("//head")
+                            if head:
+                                head_elem = head[0]
+                                head_elem.append(etree.XML("""
+<script src="../../js/{0}.js" type="text/javascript" charset="utf-8"> </script>
+                                """.format(bundlename)))
+                                head_elem.append(etree.XML("""
+<link rel="stylesheet" href="../../style/{0}.css" type="text/css"/>
+                                """.format(bundlename)))
+                            html_file.seek(0)
+                            html_file.truncate()
+                            html_file.write(etree.tostring(tree))
+
+                elif os.path.isdir(path):
+                    shutil.copytree(path, os.path.join(docs_path, module_resource))
 
 
 def build_zipfile(bundlezip_path, bundledir_path):
     with ZipFile(bundlezip_path, "w") as bundlezip:
-        current_dir = os.getcwd()
+        initial_dir = os.getcwd()
         os.chdir(bundledir_path)
         for base, dirs, files in os.walk("."):
             for file_name in files:
                 file_path = os.path.join(base, file_name)
                 bundlezip.write(file_path)
-        os.chdir(current_dir)
+        os.chdir(initial_dir)
 
 
 def make_bundle(request):
@@ -155,7 +201,7 @@ def make_bundle(request):
     # maybe indicate if it's full, core or custom in the name?
     bundlename = "patterns-{0}{1}".format(version, "-min" if minify else "")
     bundlehash = "{0}-{1}".format(bundlename, hashkey.hexdigest())
-    bundledir_path = "bundlecache/{0}".format(bundlehash)
+    bundledir_path = os.path.abspath(os.path.join("bundlecache", bundlehash))
     bundlezip_path = "bundlecache/{0}.zip".format(bundlehash)
 
     log.info('Hashkey generated: {0}'.format(hashkey.hexdigest()))
@@ -170,7 +216,8 @@ def make_bundle(request):
             shutil.copytree("skel", bundledir_path)
 
         build_js(modules, bundlehash, bundlename, uglify)
-        build_css(bundledir_path, modules, minify, bundlehash, bundlename)
+        build_css(bundledir_path, modules, minify, bundlename)
+        build_html(modules, bundledir_path, bundlename)
         build_zipfile(bundlezip_path, bundledir_path)
 
     data = open(bundlezip_path, 'rb').read()
