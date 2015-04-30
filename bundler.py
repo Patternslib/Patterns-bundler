@@ -73,33 +73,31 @@ TPL_tail = """
 """
 
 
-def build_js(modules, bundlehash, bundlename, uglify):
-    if not os.path.exists(patternsdir+"/build-custom.js"):
-        buildfile = open(patternsdir+'/build.js', 'rb').read().replace(
-            '"patterns": "patterns"', '"patterns": "patterns-custom"')
-        open(patternsdir+'/build-custom.js', 'wb').write(buildfile)
+def build_js(modules, bundlehash, bundlename, bundledir_path, uglify):
+    tmp_bundledir = os.path.join(bundledir_path, "tmp")
+    build_js_path = os.path.join(patternsdir, "build.js")
+    copy_tree(os.path.join(patternsdir, "src"), os.path.join(tmp_bundledir, "src"))
+    shutil.copy(build_js_path, tmp_bundledir)
 
     # parse query string for patterns and add them
     module_str = ",\n".join(["'%s'" % m for m in modules])
     custom_config = "%s\n%s\n%s" % (TPL_head, module_str, TPL_tail)
     log.info(custom_config)
-    data = open(patternsdir+'/src/patterns-custom.js', 'wb')
+    data = open(os.path.join(tmp_bundledir, 'src', 'patterns.js'), 'wb')
     data.write(custom_config)
     data.close()
 
-    subprocess.call([
-        patternsdir+"/node_modules/.bin/r.js",
-        "-o",
-        patternsdir+"/build-custom.js",
-        "out=bundlecache/{0}/js/{1}.js".format(bundlehash, bundlename),
-        "include=patterns-custom",
-        "insertRequire=patterns-custom",
-        "optimize="+uglify,
-    ])
+    initial_dir = os.getcwd()
+    os.chdir(tmp_bundledir)
+    require_js = "{0}/node_modules/.bin/r.js -o build.js out=../js/{1}.js optimize={2}".format(
+        patternsdir, bundlename, uglify
+    )
+    subprocess.call(require_js.split(" "))
+    os.chdir(initial_dir)
 
 
 def build_css(bundledir_path, modules, minify, bundlename):
-    scss_path = os.path.abspath(os.path.join(bundledir_path, "patterns.scss"))
+    scss_path = os.path.abspath(os.path.join(bundledir_path, "tmp", "patterns.scss"))
     initial_dir = os.getcwd()
     os.chdir(patternsdir)
     with open(scss_path, "w") as patterns_scss:
@@ -110,10 +108,7 @@ def build_css(bundledir_path, modules, minify, bundlename):
                 patterns_scss.write('@import "{0}";\n'.format(module_scss_path))
         patterns_scss.write('@import "{0}/_sass/_patterns.scss";'.format(patternsdir))
     sass_cmd = subprocess.Popen(
-        ["sass",
-         "--style={0}".format("compressed" if minify else "nested"),
-         #"--load-path={0}/_sass".format(patternsdir),
-         scss_path],
+        ["sass", "--style={0}".format("compressed" if minify else "nested"), scss_path],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
     )
@@ -121,7 +116,6 @@ def build_css(bundledir_path, modules, minify, bundlename):
             os.path.join(bundledir_path, "style", bundlename+".css"), "w") as css_file:
         css, error = sass_cmd.communicate()
         css_file.write(css)
-    os.remove(scss_path)
     os.chdir(initial_dir)
 
 
@@ -158,6 +152,9 @@ def build_html(modules, bundledir_path, bundlename):
                                 head_elem.append(etree.XML("""
 <link rel="stylesheet" href="../../style/{0}.css" type="text/css"/>
                                 """.format(bundlename)))
+                                head_elem.append(etree.XML("""
+<link rel="stylesheet" href="../../style/common.css" type="text/css"/>
+                                """))
                             html_file.seek(0)
                             html_file.truncate()
                             html_file.write(etree.tostring(tree))
@@ -173,7 +170,8 @@ def build_zipfile(bundlezip_path, bundledir_path):
         for base, dirs, files in os.walk("."):
             for file_name in files:
                 file_path = os.path.join(base, file_name)
-                bundlezip.write(file_path)
+                if "/tmp/" not in file_path:
+                    bundlezip.write(file_path)
         os.chdir(initial_dir)
 
 
@@ -215,7 +213,7 @@ def make_bundle(request):
         if not os.path.exists(bundledir_path):
             shutil.copytree("skel", bundledir_path)
 
-        build_js(modules, bundlehash, bundlename, uglify)
+        build_js(modules, bundlehash, bundlename, bundledir_path, uglify)
         build_css(bundledir_path, modules, minify, bundlename)
         build_html(modules, bundledir_path, bundlename)
         build_zipfile(bundlezip_path, bundledir_path)
