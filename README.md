@@ -21,3 +21,5 @@ be used.
 
 To run the server in the background you can use circus. You need to pip install 
 circus and circus-web to run it
+
+    bin/circusd --daemon circus.ini
