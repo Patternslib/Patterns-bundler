@@ -94,12 +94,19 @@ def build_css(bundledir_path, modules, minify, bundlename):
     initial_dir = os.getcwd()
     os.chdir(patternsdir)
     with open(scss_path, "w") as patterns_scss:
+        patterns_scss.write('@import "{0}/_sass/_settings.scss";\n'.format(patternsdir))
+        patterns_scss.write('@import "{0}/_sass/_mixins.scss";\n'.format(patternsdir))
+        patterns_scss.write('@import "{0}/_sass/components/_button.scss";\n'.format(patternsdir))
+        patterns_scss.write('@import "{0}/_sass/components/_button-bar.scss";\n'.format(patternsdir))
+        patterns_scss.write('@import "{0}/_sass/components/_avatar.scss";\n'.format(patternsdir))
+        patterns_scss.write('@import "{0}/_sass/components/_form.scss";\n'.format(patternsdir))
+        patterns_scss.write('@import "{0}/_sass/components/_icon.scss";\n'.format(patternsdir))
         for module in modules:
             module_name = module.replace("pat-", "")
             module_scss_path = "{0}/src/pat/{1}/_{1}.scss".format(patternsdir, module_name)
             if os.path.exists(module_scss_path):
                 patterns_scss.write('@import "{0}";\n'.format(module_scss_path))
-        patterns_scss.write('@import "{0}/_sass/_patterns.scss";'.format(patternsdir))
+
     sass_cmd = subprocess.Popen(
         ["sass", "--style={0}".format("compressed" if minify else "nested"), scss_path],
         stdin=subprocess.PIPE,
