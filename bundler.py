@@ -34,7 +34,7 @@ parser.add_argument(
 parser.add_argument(
     '--patternsdir',
     dest='patternsdir',
-    default='../Patterns',
+    default='../Patterns-site/patternslib',
     help='Path to the Patterns checkout.',
 )
 cargs = parser.parse_args()
@@ -46,20 +46,12 @@ version = json.load(
 TPL_head = """/* Patterns bundle configuration.
 *
 * This file is used to tell r.js which Patterns to load when it generates a
-* bundle. This is only used when generating a full Patterns bundle, or when
-* you want a simple way to include all patterns in your own project. If you
-* only want to use selected patterns you will need to pull in the patterns
-* directly in your RequireJS configuration.
+* bundle.
 */
 
 define([
     "jquery",
     "pat-registry",
-    "logging",
-    "pat-parser",
-    "pat-htmlparser",
-    "pat-depends_parse",
-    "pat-dependshandler",
 """
 
 TPL_tail = """
@@ -76,6 +68,7 @@ TPL_tail = """
 def build_js(modules, bundlehash, bundlename, bundledir_path, uglify):
     tmp_bundledir = os.path.join(bundledir_path, "tmp")
     build_js_path = os.path.join(patternsdir, "build.js")
+    shutil.copy(os.path.join(patternsdir, "main.js"), tmp_bundledir)
     copy_tree(os.path.join(patternsdir, "src"), os.path.join(tmp_bundledir, "src"))
     shutil.copy(build_js_path, tmp_bundledir)
 
