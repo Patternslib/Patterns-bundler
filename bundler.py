@@ -32,6 +32,12 @@ parser.add_argument(
     help='port to listen on. Defaults to 8080.',
 )
 parser.add_argument(
+    '--websitedir',
+    dest='websitedir',
+    default='../Patterns-site',
+    help='Path to the Patterns checkout.',
+)
+parser.add_argument(
     '--patternsdir',
     dest='patternsdir',
     default='../Patterns-site/patternslib',
@@ -39,6 +45,7 @@ parser.add_argument(
 )
 cargs = parser.parse_args()
 patternsdir = os.path.abspath(cargs.patternsdir)
+websitedir = os.path.abspath(cargs.websitedir)
 
 version = json.load(
     open(patternsdir+"/package.json", "rb"))['version'].encode('utf-8')
@@ -121,6 +128,7 @@ def build_css(bundledir_path, modules, minify, bundlename):
 
 def build_html(modules, bundledir_path, bundlename):
     copy_tree(os.path.join(patternsdir, "style"), os.path.join(bundledir_path, "style"))
+    copy_tree(os.path.join(websitedir, 'style'), os.path.join(bundledir_path, "style", "website"))
 
     for module in modules:
         module_name = module.replace("pat-", "")
@@ -150,11 +158,17 @@ def build_html(modules, bundledir_path, bundlename):
 <script src="../../js/{0}.js" type="text/javascript" charset="utf-8"> </script>
                                 """.format(bundlename)))
                                 head_elem.append(etree.XML("""
-<link rel="stylesheet" href="../../style/{0}.css" type="text/css"/>
+<link rel="stylesheet" href="../../style/website/fontello/css/fontello.css" type="text/css"/>
                                 """.format(bundlename)))
                                 head_elem.append(etree.XML("""
-<link rel="stylesheet" href="../../style/common.css" type="text/css"/>
+<link rel="stylesheet" href="../../style/fontello/css/fontello.css" type="text/css"/>
+                                """.format(bundlename)))
+                                head_elem.append(etree.XML("""
+<link rel="stylesheet" href="../../style/patterns.css" type="text/css"/>
                                 """))
+                                head_elem.append(etree.XML("""
+<link rel="stylesheet" href="../../style/{0}.css" type="text/css"/>
+                                """.format(bundlename)))
                             html_file.seek(0)
                             html_file.truncate()
                             html_file.write(etree.tostring(tree))
