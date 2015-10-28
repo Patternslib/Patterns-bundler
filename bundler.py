@@ -86,6 +86,7 @@ def build_js(modules, bundlehash, bundlename, bundledir_path, uglify):
     data = open(os.path.join(tmp_bundledir, 'src', 'patterns.js'), 'wb')
     data.write(custom_config)
     data.close()
+    open(os.path.join(tmp_bundledir, 'VERSION.txt'), 'w').write('/*! Version %s\nCustom Config:\n%s\n */' % (version, module_str))
 
     initial_dir = os.getcwd()
     os.chdir(tmp_bundledir)
@@ -215,7 +216,7 @@ def make_bundle(request):
     bundlehash = "{0}-{1}".format(bundlename, hashkey.hexdigest())
     bundledir_path = os.path.abspath(os.path.join("bundlecache", bundlehash))
     bundlezip_path = "bundlecache/{0}.zip".format(bundlehash)
-
+    
     log.info('Hashkey generated: {0}'.format(hashkey.hexdigest()))
     log.info('Bundlehash generated: {0}'.format(bundlehash))
 
@@ -228,8 +229,8 @@ def make_bundle(request):
             shutil.copytree("skel", bundledir_path)
 
         build_js(modules, bundlehash, bundlename, bundledir_path, uglify)
-        build_css(bundledir_path, modules, minify, bundlename)
-        build_html(modules, bundledir_path, bundlename)
+#        build_css(bundledir_path, modules, minify, bundlename)
+#        build_html(modules, bundledir_path, bundlename)
         build_zipfile(bundlezip_path, bundledir_path)
 
     data = open(bundlezip_path, 'rb').read()
