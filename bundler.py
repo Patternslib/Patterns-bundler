@@ -204,7 +204,7 @@ def build_zipfile(bundlezip_path, bundledir_path):
         for base, dirs, files in os.walk("."):
             for file_name in files:
                 file_path = os.path.join(base, file_name)
-                if "/tmp/" not in file_path:
+                if "/tmp/" not in file_path and "/cache/" not in file_path:
                     bundlezip.write(file_path)
                     print "adding %s" % file_path
         os.chdir(initial_dir)
