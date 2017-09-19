@@ -40,8 +40,8 @@ parser.add_argument(
 parser.add_argument(
     '--patternsdir',
     dest='patternsdir',
-    default='../Patterns-site/patternslib',
-    help='Path to the Patterns checkout.',
+    default='../project-scaffold',
+    help='Path to the project scaffold.',
 )
 cargs = parser.parse_args()
 patternsdir = os.path.abspath(cargs.patternsdir)
@@ -52,8 +52,8 @@ version = json.load(
 
 TPL_head = """/* Patterns bundle configuration.
 *
-* This file is used to tell r.js which Patterns to load when it generates a
-* bundle.
+* This file is used to tell webpack.config.js which Patterns to load when it
+* generates a bundle.
 */
 
 define([
@@ -63,7 +63,11 @@ define([
 
 TPL_tail = """
 ], function($, registry) {
-    window.patterns = registry;
+    // Since we are in a non-AMD env, register a few useful utilites
+    var window = require("window");
+    window.jQuery = $;
+    require("imports-loader?this=>window!jquery.browser");
+
     $(function () {
         registry.init();
     });
@@ -74,49 +78,61 @@ TPL_tail = """
 
 def build_js(modules, bundlehash, bundlename, bundledir_path, uglify):
     tmp_bundledir = os.path.join(bundledir_path, "tmp")
-    build_js_path = os.path.join(patternsdir, "build.js")
-    shutil.copy(os.path.join(patternsdir, "main.js"), tmp_bundledir)
-    copy_tree(os.path.join(patternsdir, "src"), os.path.join(tmp_bundledir, "src"))
-    shutil.copy(build_js_path, tmp_bundledir)
+    copy_tree(patternsdir,
+              tmp_bundledir)
 
     # parse query string for patterns and add them
     module_str = ",\n".join(["'%s'" % m for m in modules])
     custom_config = "%s\n%s\n%s" % (TPL_head, module_str, TPL_tail)
     log.info(custom_config)
-    data = open(os.path.join(tmp_bundledir, 'src', 'patterns.js'), 'wb')
+    data = open(os.path.join(tmp_bundledir, 'bundle-config.js'), 'wb')
     data.write(custom_config)
     data.close()
-    open(os.path.join(tmp_bundledir, 'VERSION.txt'), 'w').write('/*! Version %s\nCustom Config:\n%s\n */' % (version, module_str))
+    open(os.path.join(tmp_bundledir, 'VERSION.txt'), 'w').write(
+        '/*! Version %s\nCustom Config:\n%s\n */' % (version, module_str))
 
     initial_dir = os.getcwd()
     os.chdir(tmp_bundledir)
-    require_js = "{0}/node_modules/.bin/r.js -o build.js out=../js/{1}.js optimize={2}".format(
-        patternsdir, bundlename, uglify
+    cmdline = "cd {0} && NODE_ENV=production node_modules/.bin/webpack --config webpack.config.js".format(
+        tmp_bundledir
     )
-    subprocess.call(require_js.split(" "))
+    subprocess.call(cmdline.split(" "))
     os.chdir(initial_dir)
+    copy_tree(os.path.join(tmp_bundledir, "bundles"),
+              os.path.join(bundledir_path, "js"))
 
 
 def build_css(bundledir_path, modules, minify, bundlename):
-    scss_path = os.path.abspath(os.path.join(bundledir_path, "tmp", "patterns.scss"))
+    scss_path = os.path.abspath(os.path.join(
+        bundledir_path, "tmp", "patterns.scss"))
     initial_dir = os.getcwd()
     os.chdir(patternsdir)
     with open(scss_path, "w") as patterns_scss:
-        patterns_scss.write('@import "{0}/_sass/_settings.scss";\n'.format(patternsdir))
-        patterns_scss.write('@import "{0}/_sass/_mixins.scss";\n'.format(patternsdir))
-        patterns_scss.write('@import "{0}/_sass/components/_button.scss";\n'.format(patternsdir))
-        patterns_scss.write('@import "{0}/_sass/components/_button-bar.scss";\n'.format(patternsdir))
-        patterns_scss.write('@import "{0}/_sass/components/_avatar.scss";\n'.format(patternsdir))
-        patterns_scss.write('@import "{0}/_sass/components/_form.scss";\n'.format(patternsdir))
-        patterns_scss.write('@import "{0}/_sass/components/_icon.scss";\n'.format(patternsdir))
+        patterns_scss.write(
+            '@import "{0}/_sass/_settings.scss";\n'.format(patternsdir))
+        patterns_scss.write(
+            '@import "{0}/_sass/_mixins.scss";\n'.format(patternsdir))
+        patterns_scss.write(
+            '@import "{0}/_sass/components/_button.scss";\n'.format(patternsdir))
+        patterns_scss.write(
+            '@import "{0}/_sass/components/_button-bar.scss";\n'.format(patternsdir))
+        patterns_scss.write(
+            '@import "{0}/_sass/components/_avatar.scss";\n'.format(patternsdir))
+        patterns_scss.write(
+            '@import "{0}/_sass/components/_form.scss";\n'.format(patternsdir))
+        patterns_scss.write(
+            '@import "{0}/_sass/components/_icon.scss";\n'.format(patternsdir))
         for module in modules:
             module_name = module.replace("pat-", "")
-            module_scss_path = "{0}/src/pat/{1}/_{1}.scss".format(patternsdir, module_name)
+            module_scss_path = "{0}/src/pat/{1}/_{1}.scss".format(
+                patternsdir, module_name)
             if os.path.exists(module_scss_path):
-                patterns_scss.write('@import "{0}";\n'.format(module_scss_path))
+                patterns_scss.write(
+                    '@import "{0}";\n'.format(module_scss_path))
 
     sass_cmd = subprocess.Popen(
-        ["sass", "--style={0}".format("compressed" if minify else "nested"), scss_path],
+        ["sass",
+            "--style={0}".format("compressed" if minify else "nested"), scss_path],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
     )
@@ -128,8 +144,10 @@ def build_css(bundledir_path, modules, minify, bundlename):
 
 
 def build_html(modules, bundledir_path, bundlename):
-    copy_tree(os.path.join(patternsdir, "style"), os.path.join(bundledir_path, "style"))
-    copy_tree(os.path.join(websitedir, 'style'), os.path.join(bundledir_path, "style", "website"))
+    copy_tree(os.path.join(patternsdir, "style"),
+              os.path.join(bundledir_path, "style"))
+    copy_tree(os.path.join(websitedir, 'style'),
+              os.path.join(bundledir_path, "style", "website"))
 
     for module in modules:
         module_name = module.replace("pat-", "")
@@ -175,7 +193,8 @@ def build_html(modules, bundledir_path, bundlename):
                             html_file.write(etree.tostring(tree))
 
                 elif os.path.isdir(path):
-                    shutil.copytree(path, os.path.join(docs_path, module_resource))
+                    shutil.copytree(path, os.path.join(
+                        docs_path, module_resource))
 
 
 def build_zipfile(bundlezip_path, bundledir_path):
@@ -187,6 +206,7 @@ def build_zipfile(bundlezip_path, bundledir_path):
                 file_path = os.path.join(base, file_name)
                 if "/tmp/" not in file_path:
                     bundlezip.write(file_path)
+                    print "adding %s" % file_path
         os.chdir(initial_dir)
 
 
@@ -216,7 +236,7 @@ def make_bundle(request):
     bundlehash = "{0}-{1}".format(bundlename, hashkey.hexdigest())
     bundledir_path = os.path.abspath(os.path.join("bundlecache", bundlehash))
     bundlezip_path = "bundlecache/{0}.zip".format(bundlehash)
-    
+
     log.info('Hashkey generated: {0}'.format(hashkey.hexdigest()))
     log.info('Bundlehash generated: {0}'.format(bundlehash))
 
@@ -227,7 +247,6 @@ def make_bundle(request):
     if not os.path.exists(bundlezip_path):
         if not os.path.exists(bundledir_path):
             shutil.copytree("skel", bundledir_path)
-
         build_js(modules, bundlehash, bundlename, bundledir_path, uglify)
 #        build_css(bundledir_path, modules, minify, bundlename)
 #        build_html(modules, bundledir_path, bundlename)
@@ -236,7 +255,8 @@ def make_bundle(request):
     data = open(bundlezip_path, 'rb').read()
     mResponse = Response(data)
     mResponse.headers['content-type'] = 'application/zip'
-    mResponse.headers['content-disposition'] = 'attachment;filename={0}.zip'.format(bundlename)
+    mResponse.headers[
+        'content-disposition'] = 'attachment;filename={0}.zip'.format(bundlename)
 
     return mResponse
 
