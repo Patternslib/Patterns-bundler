@@ -96,7 +96,7 @@ def build_js(modules, bundlehash, bundlename, bundledir_path, uglify):
     cmdline = "cd {0} && NODE_ENV=production node_modules/.bin/webpack --config webpack.config.js".format(
         tmp_bundledir
     )
-    subprocess.call(cmdline.split(" "))
+    subprocess.call(cmdline.split(" "), shell=True)
     os.chdir(initial_dir)
     copy_tree(os.path.join(tmp_bundledir, "bundles"),
               os.path.join(bundledir_path, "js"))
